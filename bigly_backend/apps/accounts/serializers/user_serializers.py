@@ -35,11 +35,14 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_can_message(self, obj) -> bool:
         request = self.context.get('request', None)
-        chat_settings = obj.chat_settings
-        message_first_permission = chat_settings.message_first_permission
-        if request and request.user.is_authenticated:
-            return message_first_permission != 'nobody'
-        return False
+        try:
+            chat_settings = obj.chat_settings
+            message_first_permission = chat_settings.message_first_permission
+            if request and request.user.is_authenticated:
+                return message_first_permission != 'nobody'
+            return False
+        except: 
+            return False
 
     def get_is_blocked(self, obj) -> bool:
         request = self.context.get('request', None)

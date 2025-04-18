@@ -24,13 +24,16 @@ class CommentAPIView(APIView):
         serializer = CommentSerializer(comments, many=True, context={'request': request})
         return Response(serializer.data)
     
+class CommentCreateAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
     @extend_schema(
         request=CommentSerializer,
         responses={201: CommentSerializer},
         tags=['Comment'],
         description='Create new comment'
     )
-    def content(self, request, content_id):
+    def post(self, request, content_id):
         content = get_object_or_404(Content, id=content_id)
         serializer = CommentSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
