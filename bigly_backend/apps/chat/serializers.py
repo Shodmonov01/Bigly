@@ -171,11 +171,20 @@ class MediaSerializer(serializers.Serializer):
         return validated_data
 
     def validate(self, attrs):
+        import mimetypes
         temporary_file: TemporaryUploadedFile = attrs.get('media')
         file_path = default_storage.save(f'messages/{temporary_file.name}', temporary_file)
         file: File = default_storage.open(file_path)
-        thumbnail_path = file.name + '_thumbnail.jpg'
-        ffmpeg.input(file.name, ss=1).output(thumbnail_path, vframes=1).run(capture_stdout=True, capture_stderr=True)
+
+        mime_type, _ = mimetypes.guess_type(file.name)
+
+        if mime_type and mime_type.startswith('video'):
+            thumbnail_path = file.name + '_thumbnail.jpg'
+            ffmpeg.input(file.name, ss=1).output(thumbnail_path, vframes=1).run(
+                capture_stdout=True, capture_stderr=True
+            )
+
+        # audio files are accepted but skipped from thumbnail generation
         return {'media': file_path}
 
 

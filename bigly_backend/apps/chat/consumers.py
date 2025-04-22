@@ -50,16 +50,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
     async def receive(self, text_data=None, bytes_data=None):
+        print(text_data, 'this is text data')
         text_data_json = json.loads(text_data)
         message_text = text_data_json.get('message', None)
         media = text_data_json.get('media', None)
         media_type = text_data_json.get('media_type', None)
         media_aspect_ratio = text_data_json.get('media_aspect_ratio', None)
-        if message_text or media:
+        if text_data or media:
             message = await Message.objects.acreate(
                 chat=self.chat,
                 sender=self.user,
-                content=message_text,
+                content=text_data,
                 media=media,
                 media_type=media_type,
                 media_aspect_ratio=media_aspect_ratio,
