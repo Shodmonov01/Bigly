@@ -19,6 +19,8 @@ urlpatterns = [
     path('api/', include('apps.comments.urls')),
     path('api/', include('apps.chat.urls')),
     path('api/', include('apps.notification.urls')),
+
+    path('auth/', include('social_django.urls', namespace='social')),
 ]
 
 if settings.DEBUG:

@@ -6,7 +6,7 @@ from rest_framework import status
 from drf_spectacular.utils import extend_schema
 
 from apps.accounts.serializers import FollowSerializer, UserListSerializer
-from apps.accounts.models import User
+from apps.accounts.models import User, Follow
 from apps.notification.models import Notification
 
 
@@ -31,6 +31,26 @@ class FollowAPIView(APIView):
             serializer.save()
             return Response({'detail': 'Successfully followed'}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+class UnfollowAPIView(APIView):
+    serializer_class = FollowSerializer
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        request=None,
+       
+        tags=['Follow'],
+        description='Unfollow user'
+    )
+    def delete(self, request, username):
+        user = get_object_or_404(User, username=username)
+        try:
+            follow = Follow.objects.get(follower=request.user, following=user)
+            follow.delete()
+            print('unfollowed')
+            return Response({'detail': 'Successfully unfollowed this user'}, status=status.HTTP_204_NO_CONTENT)
+        except Follow.DoesNotExist:
+            return Response({'detail': 'You are not following this user'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UserFollowersAPIView(APIView):

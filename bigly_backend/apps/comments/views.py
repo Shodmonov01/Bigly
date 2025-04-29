@@ -5,7 +5,7 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 
-from .serializers import CommentSerializer
+from .serializers import CommentSerializer, CommentCreateSerializer
 from apps.comments.models import Comment
 from apps.content.models import Content
 
@@ -28,14 +28,14 @@ class CommentCreateAPIView(APIView):
     permission_classes = (IsAuthenticated,)
 
     @extend_schema(
-        request=CommentSerializer,
-        responses={201: CommentSerializer},
+        request=CommentCreateSerializer,
+        responses={201: CommentCreateSerializer},
         tags=['Comment'],
         description='Create new comment'
     )
     def post(self, request, content_id):
         content = get_object_or_404(Content, id=content_id)
-        serializer = CommentSerializer(data=request.data, context={'request': request})
+        serializer = CommentCreateSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save(user=request.user, content=content)
             return Response(serializer.data, status=201)
