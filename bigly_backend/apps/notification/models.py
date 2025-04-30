@@ -46,8 +46,9 @@ from firebase_admin.messaging import Notification as FirebaseNotification
 def notify_user(sender, instance, created, **kwargs):
     if created:
         try:
-
+            print(instance.user, 'user instance')
             devices: FCMDeviceQuerySet = FCMDevice.objects.filter(user=instance.user)
+
             print(devices, 'devices')
             for device in devices:
                 print(device, 'device')
