@@ -6,3 +6,4 @@ __pycache__/
 env/
 media/
 venv/
+Bigly/bigly_backend/config/firebase/credentials.json
