@@ -14,6 +14,15 @@ from apps.accounts.serializers import (
     SocialAuthSerializer
 )
 
+from google.oauth2 import id_token
+from google.auth.transport import requests
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from rest_framework import serializers
+
+
+
+
 
 class LoginAPIView(APIView):
     permission_classes = (AllowAny,)
@@ -104,6 +113,9 @@ class ChangePasswordAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+
+
 class SocialAuthView(APIView):
     serializer_class = SocialAuthSerializer
     permission_classes = (AllowAny,)
@@ -116,7 +128,9 @@ class SocialAuthView(APIView):
     )
     def post(self, request):
         serializer = self.serializer_class(data=request.data, context={'request': request})
+
         if serializer.is_valid(raise_exception=True):
             serializer.save()
+            print(serializer.data, 'serializer data')
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

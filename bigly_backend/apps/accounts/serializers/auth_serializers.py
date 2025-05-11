@@ -174,8 +174,60 @@ class ChangePasswordSerializer(serializers.Serializer):
         return user
 
 
-class SocialAuthSerializer(serializers.Serializer):
+from google.oauth2 import id_token
+from google.auth.transport import requests
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from rest_framework import serializers
 
+# class SocialAuthSerializer(serializers.Serializer):
+
+#     PROVIDERS = [
+#         ['google-oauth2', 'Google'],
+#         ['facebook', 'Facebook'],
+#         ['apple-id', 'Apple'],
+#     ]
+#     provider = serializers.ChoiceField(choices=PROVIDERS, write_only=True)
+#     token = serializers.CharField(write_only=True)
+#     refresh = serializers.CharField(read_only=True, min_length=200, max_length=300)
+#     access = serializers.CharField(read_only=True, min_length=200, max_length=300)
+
+#     def create(self, validated_data):
+#         strategy = load_strategy(self.context['request'])
+#         backend = load_backend(strategy=strategy, name=validated_data.pop('provider'), redirect_uri=None)
+#         token = validated_data.pop('token')
+        
+#         # Try a different approach for ID token verification
+#         try:
+#             # First, try explicitly with id_token parameter
+#             user = backend.do_auth(id_token=token)
+#         except Exception as e:
+#             print(f"First auth attempt failed: {e}")
+#             try:
+#                 # If that fails, try the newer approach (for updated libraries)
+#                 user = backend.do_auth(token)
+#             except Exception as e:
+#                 print(f"Second auth attempt failed: {e}")
+#                 raise serializers.ValidationError("Authentication failed")
+        
+#         if user and user.is_active:
+#             ChatSetting.objects.get_or_create(user=user)
+#             refresh = self.get_token(user)
+#             data = {
+#                 'refresh': str(refresh),
+#                 'access': str(refresh.access_token)
+#             }
+#             update_last_login(None, user)
+#             return data
+#         return None
+
+#     @staticmethod
+#     def get_token(user) -> RefreshToken:
+#         return RefreshToken.for_user(user)
+
+
+class SocialAuthSerializer(serializers.Serializer):
+    # Your existing serializer fields
     PROVIDERS = [
         ['google-oauth2', 'Google'],
         ['facebook', 'Facebook'],
@@ -187,22 +239,68 @@ class SocialAuthSerializer(serializers.Serializer):
     access = serializers.CharField(read_only=True, min_length=200, max_length=300)
 
     def create(self, validated_data):
-        strategy = load_strategy(self.context['request'])
-        backend = load_backend(strategy=strategy, name=validated_data.pop('provider'), redirect_uri=None)
+        provider = validated_data.pop('provider', 'google-oauth2')
         token = validated_data.pop('token')
-        user = backend.do_auth(token)
-        ChatSetting.objects.get_or_create(user=user)
-
-        if user and user.is_active:
-            refresh = self.get_token(user)
-            data = {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token)
-            }
-            update_last_login(None, user)
-            return data
-        return None
-
+        
+        if provider == 'google-oauth2':
+            try:
+                # Verify the ID token with Google
+                client_id = settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
+                idinfo = id_token.verify_oauth2_token(token, requests.Request(), client_id)
+                
+                # Check if token is valid
+                if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+                    raise ValueError('Wrong issuer.')
+                
+                # Get user info from token
+                email = idinfo['email']
+                name = idinfo.get('name', '')
+                first_name = idinfo.get('given_name', '')
+                last_name = idinfo.get('family_name', '')
+                
+                # Get or create user
+                User = get_user_model()
+                try:
+                    user = User.objects.get(email=email)
+                except User.DoesNotExist:
+                    user = User.objects.create_user(
+                        username=email,  # Use email as username
+                        email=email,
+                        first_name=first_name,
+                        last_name=last_name
+                    )
+                
+                # Set additional user properties if needed
+                if not user.first_name and first_name:
+                    user.first_name = first_name
+                if not user.last_name and last_name:
+                    user.last_name = last_name
+                user.save()
+                
+                # Create chat settings
+                # Import at function level to avoid circular imports
+                ChatSetting.objects.get_or_create(user=user)
+                
+                # Generate tokens
+                refresh = self.get_token(user)
+                data = {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token)
+                }
+                from django.contrib.auth.models import update_last_login
+                update_last_login(None, user)
+                return data
+                
+            except ValueError as e:
+                # Invalid token
+                print(f"ID token validation error: {e}")
+                raise serializers.ValidationError("Invalid token")
+        else:
+            # Handle other providers here
+            raise serializers.ValidationError(f"Provider {provider} not supported")
+        
     @staticmethod
     def get_token(user) -> RefreshToken:
         return RefreshToken.for_user(user)
+        
+        

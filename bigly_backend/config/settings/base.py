@@ -169,10 +169,22 @@ FCM_DJANGO_SETTINGS = {
 
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY =  os.getenv('SOCIAL_AUTH_GOOGLE_OAUTH2_KEY')
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.getenv('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET')
-SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = ['email', 'profile']
+# SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = ['email', 'profile']
 SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS = {
     'access_type': 'offline',
     'prompt': 'consent'
 }
-
+SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = ['profile', 'email']
+SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS = {'access_type': 'offline'}
+SOCIAL_AUTH_GOOGLE_OAUTH2_ID_TOKEN_BACKEND = 'social_core.backends.google.GoogleIdTokenBackend'
+SOCIAL_AUTH__OAUTH2_WHITELISTED_DOMAINS = ["localhost",]
+DD_SOCIAL_AUTH_GOOGLE_OAUTH2_WHITELISTED_DOMAINS = ["localhost",]
 SOCIAL_AUTH_GOOGLE_OAUTH2_REDIRECT_URI = 'http://localhost:8000/auth/complete/google-oauth2/'
+
+SOCIAL_AUTH_GOOGLE_OAUTH2_USE_UNIQUE_USER_ID = True
+SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS = {
+    'access_type': 'offline',
+    'prompt': 'consent'
+}
+# This is important for ID token validation
+SOCIAL_AUTH_GOOGLE_OAUTH2_ID_TOKEN_VALIDATION = True
