@@ -395,6 +395,9 @@ class SocialAuthSerializer(serializers.Serializer):
                 first_name=first_name,
                 last_name=last_name
             )
+
+
+            
         
         # Update user info if not already set
         updated = False
