@@ -226,8 +226,20 @@ from rest_framework import serializers
 #         return RefreshToken.for_user(user)
 
 
+
+import requests
+import jwt
+from cryptography.hazmat.primitives import serialization
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from rest_framework import serializers
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from apps.chat.models import Chat, ChatSetting
+
+
+
 class SocialAuthSerializer(serializers.Serializer):
-    # Your existing serializer fields
     PROVIDERS = [
         ['google-oauth2', 'Google'],
         ['facebook', 'Facebook'],
@@ -243,64 +255,183 @@ class SocialAuthSerializer(serializers.Serializer):
         token = validated_data.pop('token')
         
         if provider == 'google-oauth2':
-            try:
-                # Verify the ID token with Google
-                client_id = settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
-                idinfo = id_token.verify_oauth2_token(token, requests.Request(), client_id)
-                
-                # Check if token is valid
-                if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
-                    raise ValueError('Wrong issuer.')
-                
-                # Get user info from token
-                email = idinfo['email']
-                name = idinfo.get('name', '')
-                first_name = idinfo.get('given_name', '')
-                last_name = idinfo.get('family_name', '')
-                
-                # Get or create user
-                User = get_user_model()
-                try:
-                    user = User.objects.get(email=email)
-                except User.DoesNotExist:
-                    user = User.objects.create_user(
-                        username=email,  # Use email as username
-                        email=email,
-                        first_name=first_name,
-                        last_name=last_name
-                    )
-                
-                # Set additional user properties if needed
-                if not user.first_name and first_name:
-                    user.first_name = first_name
-                if not user.last_name and last_name:
-                    user.last_name = last_name
-                user.save()
-                
-                # Create chat settings
-                # Import at function level to avoid circular imports
-                ChatSetting.objects.get_or_create(user=user)
-                
-                # Generate tokens
-                refresh = self.get_token(user)
-                data = {
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token)
-                }
-                from django.contrib.auth.models import update_last_login
-                update_last_login(None, user)
-                return data
-                
-            except ValueError as e:
-                # Invalid token
-                print(f"ID token validation error: {e}")
-                raise serializers.ValidationError("Invalid token")
+            return self._handle_google_auth(token)
+        elif provider == 'facebook':
+            return self._handle_facebook_auth(token)
+        elif provider == 'apple-id':
+            return self._handle_apple_auth(token)
         else:
-            # Handle other providers here
             raise serializers.ValidationError(f"Provider {provider} not supported")
+
+    def _handle_google_auth(self, token):
+        """Handle Google OAuth2 authentication"""
+        try:
+            # Verify the ID token with Google
+            client_id = settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
+            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), client_id)
+            
+            # Check if token is valid
+            if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+                raise ValueError('Wrong issuer.')
+            
+            # Get user info from token
+            email = idinfo['email']
+            first_name = idinfo.get('given_name', '')
+            last_name = idinfo.get('family_name', '')
+            
+            return self._get_or_create_user(email, first_name, last_name, 'google')
+            
+        except ValueError as e:
+            print(f"Google ID token validation error: {e}")
+            raise serializers.ValidationError("Invalid Google token")
+
+    def _handle_facebook_auth(self, token):
+        """Handle Facebook authentication"""
+        try:
+            # Verify token with Facebook Graph API
+            app_id = settings.SOCIAL_AUTH_FACEBOOK_KEY
+            app_secret = settings.SOCIAL_AUTH_FACEBOOK_SECRET
+            
+            # First, verify the token
+            verify_url = f"https://graph.facebook.com/debug_token"
+            verify_params = {
+                'input_token': token,
+                'access_token': f"{app_id}|{app_secret}"
+            }
+            
+            verify_response = requests.get(verify_url, params=verify_params)
+            verify_data = verify_response.json()
+            
+            if not verify_data.get('data', {}).get('is_valid'):
+                raise ValueError('Invalid Facebook token')
+            
+            # Get user info from Facebook
+            user_url = "https://graph.facebook.com/me"
+            user_params = {
+                'access_token': token,
+                'fields': 'id,email,first_name,last_name,name'
+            }
+            
+            user_response = requests.get(user_url, params=user_params)
+            
+            if user_response.status_code != 200:
+                raise ValueError('Failed to get user info from Facebook')
+            
+            user_data = user_response.json()
+            print(user_data, 'user data face')
+            
+            email = user_data.get('email')
+            if not email:
+                raise ValueError('Email not provided by Facebook')
+            
+            first_name = user_data.get('first_name', '')
+            last_name = user_data.get('last_name', '')
+            
+            return self._get_or_create_user(email, first_name, last_name, 'facebook')
+            
+        except (ValueError, requests.RequestException) as e:
+            print(f"Facebook token validation error: {e}")
+            raise serializers.ValidationError("Invalid Facebook token")
+
+    def _handle_apple_auth(self, token):
+        """Handle Apple Sign In authentication"""
+        try:
+            # Get Apple's public keys
+            apple_keys_url = "https://appleid.apple.com/auth/keys"
+            apple_keys_response = requests.get(apple_keys_url)
+            apple_keys = apple_keys_response.json()
+            
+            # Decode the JWT header to get the key ID
+            header = jwt.get_unverified_header(token)
+            key_id = header['kid']
+            
+            # Find the matching key
+            apple_key = None
+            for key in apple_keys['keys']:
+                if key['kid'] == key_id:
+                    apple_key = key
+                    break
+            
+            if not apple_key:
+                raise ValueError('Apple key not found')
+            
+            # Convert the key to PEM format
+            public_key = jwt.algorithms.RSAAlgorithm.from_jwk(apple_key)
+            
+            # Verify and decode the token
+            decoded_token = jwt.decode(
+                token,
+                public_key,
+                algorithms=['RS256'],
+                audience=settings.SOCIAL_AUTH_APPLE_ID_CLIENT,
+                issuer='https://appleid.apple.com'
+            )
+            
+            email = decoded_token.get('email')
+            if not email:
+                raise ValueError('Email not provided by Apple')
+            
+            # Apple doesn't always provide name info in the token
+            # Name is usually provided only on first sign-in
+            first_name = decoded_token.get('given_name', '')
+            last_name = decoded_token.get('family_name', '')
+            
+            return self._get_or_create_user(email, first_name, last_name, 'apple')
+            
+        except (ValueError, jwt.InvalidTokenError, requests.RequestException) as e:
+            print(f"Apple token validation error: {e}")
+            raise serializers.ValidationError("Invalid Apple token")
+
+    def _get_or_create_user(self, email, first_name, last_name, provider):
+        """Get or create user and return tokens"""
+        User = get_user_model()
         
-    @staticmethod
-    def get_token(user) -> RefreshToken:
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            user = User.objects.create_user(
+                username=email,  # Use email as username
+                email=email,
+                first_name=first_name,
+                last_name=last_name
+            )
+        
+        # Update user info if not already set
+        updated = False
+        if not user.first_name and first_name:
+            user.first_name = first_name
+            updated = True
+        if not user.last_name and last_name:
+            user.last_name = last_name
+            updated = True
+        
+        if updated:
+            user.save()
+        
+        # Create chat settings (import at function level to avoid circular imports)
+        
+        ChatSetting.objects.get_or_create(user=user)
+        
+        # Generate tokens
+        refresh = self.get_token(user)
+        print(refresh, 'refresh token')
+        print(refresh.access_token)
+        data = {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token)
+        }
+        print(data, 'data')
+        
+        # Update last login
+        from django.contrib.auth.models import update_last_login
+        update_last_login(None, user)
+        print(data, 'data--2')
+        
+        return data
+
+    def get_token(self, user):
+        """Override this method to return your JWT token"""
+        # This should return your JWT refresh token
+        # Example using djangorestframework-simplejwt:
+        from rest_framework_simplejwt.tokens import RefreshToken
         return RefreshToken.for_user(user)
-        
-        

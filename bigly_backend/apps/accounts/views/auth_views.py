@@ -113,9 +113,6 @@ class ChangePasswordAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-
-
 class SocialAuthView(APIView):
     serializer_class = SocialAuthSerializer
     permission_classes = (AllowAny,)
@@ -134,3 +131,9 @@ class SocialAuthView(APIView):
             print(serializer.data, 'serializer data')
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+from django.http import HttpResponse
+from django.shortcuts import render
+
+def data_deletion(request):
+    return render(request, )
