@@ -1,0 +1,26 @@
+<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+<script>
+  window.fbAsyncInit = function () {
+    FB.init({
+      appId: '1369307214324783',
+      cookie: true,
+      xfbml: true,
+      version: 'v19.0'
+    });
+  };
+
+  function loginWithFacebook() {
+    FB.login(function (response) {
+      if (response.authResponse) {
+        const accessToken = response.authResponse.accessToken;
+        console.log("Token:", accessToken);
+        
+        // Send this token to your Django backend via AJAX or fetch
+      } else {
+        console.log("User cancelled login or did not fully authorize.");
+      }
+    }, { scope: 'email,public_profile' });
+  }
+</script>
+
+<button onclick="loginWithFacebook()">Login with Facebook</button>
