@@ -266,9 +266,18 @@ class SocialAuthSerializer(serializers.Serializer):
     def _handle_google_auth(self, token):
         """Handle Google OAuth2 authentication"""
         try:
-            # Verify the ID token with Google
-            client_id = settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
-            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), client_id)
+            # Define both web and mobile client IDs
+            web_client_id = settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
+            mobile_client_id = "466925396157-2kushf47uajkh8jh5qq08025u3maae1q.apps.googleusercontent.com"
+            
+            # Try to verify with mobile client ID first
+            try:
+                idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), mobile_client_id)
+                print(f"Verified with mobile client ID: {mobile_client_id}")
+            except ValueError:
+                # Fallback to web client ID
+                idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), web_client_id)
+                print(f"Verified with web client ID: {web_client_id}")
             
             # Check if token is valid
             if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
@@ -397,7 +406,7 @@ class SocialAuthSerializer(serializers.Serializer):
             )
 
 
-            
+
         
         # Update user info if not already set
         updated = False
